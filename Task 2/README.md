@@ -1,185 +1,192 @@
-# Game Concept: Amazing Card (Balatro-Like Run)
+# Task 2 — Amazing Card (Balatro-Like Run)
+**Mata Kuliah: Design Pattern for Games**
 
 ---
 
-## Step 1 — Core Loop
-
-My game is a Balatro-inspired card game where the player plays poker hands across 3 rounds to
-reach a target score.
-
-The core loop is:
-
-1. Player receives a hand of 7 cards
-2. Player selects cards to play or discard
-3. System evaluates the selected hand (poker combination)
-4. Base score is calculated from the hand type
-5. Active modifiers are applied to the score (chain)
-6. Score is accumulated toward the target
-7. If hands run out or target is reached, the round ends
-8. Player visits the shop and may buy a modifier
-9. Repeat for the next round with a higher target
-
-This loop repeats every round until all 3 rounds are completed or the player fails.
-
----
-
-## Step 2 — Invariant Identification
-
-The following order must **never** change:
-
-1. Generate / fill hand
-2. Player selects cards (play or discard)
-3. Evaluate hand type → compute base score
-4. Apply modifiers to score
-5. Accumulate score, consume hand/discard slot
-6. Check round win/lose condition
-7. Shop phase (only on round win)
-8. Advance round
-
-If this order changes, gameplay logic breaks.
-
-For example:
-
-1. If modifiers are applied before scoring, the base score does not exist yet — modifier
-   produces a wrong result.
-2. If the shop phase runs before the round win check, the player can buy upgrades even after
-   losing a round.
-3. If the score accumulation happens after the win check, the system may not detect that the
-   target was reached on the final hand.
-4. If hand generation is skipped or placed after player selection, the player has nothing
-   to choose from.
-
-These steps define the structural rhythm of each round.
-
-### Required Components
-
-The game must always have:
-
-1. A `RunSession` — controls the round loop and phase order
-2. A `Card` — the data unit representing a playing card
-3. A `ScoringSystem` — evaluates hand type and computes base score
-4. An `IModifier` — interface for all score modifiers
-5. A `ShopSystem` — allows purchasing modifiers between rounds
-
-Without these, the loop cannot function. These are structural necessities.
-
----
-
-## Step 3 — Mutable Elements
-
-The following parts are mutable:
-
-1. **Scoring formula per hand type**
-   Each strategy class (`PairStrategy`, `StraightStrategy`, etc.) has its own score formula.
-   These numbers can change freely without affecting the phase order. The loop still calls
-   `evaluateHand()` the same way.
-
-2. **Modifier behavior**
-   `FlatBonusModifier` and `MultiplierModifier` can be replaced with new types (e.g., a
-   conditional modifier that only activates on Flush hands). The modifier chain loop in
-   `playHand()` remains structurally the same.
-
-3. **Shop offerings and prices**
-   The `ShopSystem` can offer different modifiers, change prices, or expand the catalog.
-   None of this changes the position of the shop phase in the loop — it still runs after
-   a round win, before the next round begins.
-
-4. **Target score scaling**
-   `targetScore += 400` per round is a mutable number. It can scale faster or slower, scale
-   based on purchased upgrades, or follow a formula. The win-check condition (`totalScore >= targetScore`)
-   stays the same structurally.
-
-5. **Coin reward formula**
-   `earnedCoins = 3 + handsRemaining` is mutable. It can factor in round number, hand type
-   used, or purchased bonuses. The phase that awards coins does not change position.
-
-These are mutable because they change **numeric behavior or content**, not structural sequence.
-
----
-
-## Step 4 — C++ Core Loop Skeleton
-
-Below is the minimal OOP skeleton reflecting the invariant loop.
-
-### File Structure
-
-```
-Task2/
-├── main.cpp
-├── Card.h
-├── RunSession.h
-├── RunSession.cpp
-├── ScoringSystem.h
-├── ShopSystem.h
-├── ModifierFactory.h
-└── modifiers/
-    └── IModifier.h
-```
-
-### How to Build
+## Cara Build & Jalankan
 
 ```bash
 g++ -std=c++17 main.cpp RunSession.cpp -o amazing_card
 ./amazing_card
 ```
 
-### Explanation of Architectural Discipline
+## Struktur File
 
-1. `RunSession` controls the phase order only — it does not contain scoring logic, modifier
-   logic, or shop logic.
-2. Hand evaluation is delegated entirely to `ScoringSystem`.
-3. Score modification is handled by the `IModifier` chain — `RunSession` just iterates it.
-4. Shop logic is encapsulated inside `ShopSystem` — `RunSession` only calls `enterShop()`.
-5. If I want to change the scoring formula for a Straight, I only modify `StraightStrategy`.
-6. If I want to add a new modifier type (e.g., suit-based bonus), I create a new class
-   implementing `IModifier` — `RunSession` does not change.
-7. If I want to change shop prices or add new items, I only modify `ShopSystem`.
-
-The invariant loop remains stable across all of these changes.
+```
+Task2/
+├── main.cpp
+├── Card.h                          ← struct data kartu (tidak butuh interface)
+├── RunSession.h / RunSession.cpp   ← pengontrol invariant loop
+├── ScoringSystem.h                 ← IScoringStrategy (interface) + 8 strategi konkret
+├── ShopSystem.h                    ← kelas konkret (tidak butuh interface)
+├── ModifierFactory.h               ← static factory (tidak butuh interface)
+└── modifiers/
+    └── IModifier.h                 ← interface + FlatBonusModifier + MultiplierModifier
+```
 
 ---
 
-## Final Reflection
+## Keputusan Penggunaan Interface
 
-### 1. What is the invariant structure of your game?
+| Komponen | Interface? | Alasan |
+|---|---|---|
+| `IModifier` | ✅ Ya | `RunSession` mengiterasi `vector<IModifier*>` secara polimorfis saat runtime. Modifier baru bisa ditambah tanpa mengubah game loop sama sekali |
+| `IScoringStrategy` | ✅ Ya | Ada 8 strategi evaluasi tangan yang dievaluasi polimorfis dari terkuat ke terlemah. Menambah tipe tangan baru cukup dengan membuat class baru |
+| `ScoringSystem` | ❌ Tidak | Hanya satu sistem scoring; `RunSession` tidak perlu menggantinya secara polimorfis |
+| `ShopSystem` | ❌ Tidak | Hanya satu implementasi toko |
+| `ModifierFactory` | ❌ Tidak | Static factory — tidak ada polimorfisme yang dibutuhkan |
+| `Card` | ❌ Tidak | Struct data murni, bukan behavior |
 
-The invariant is the **round phase order** enforced inside `RunSession`:
+---
 
-**Fill Hand → Player Selects → Evaluate Hand → Apply Modifiers → Accumulate Score →
-Check Win/Lose → Shop (if win) → Advance Round → Repeat**
+## Step 1 — Core Loop
 
-This sequence must never change. It is the structural skeleton that every round follows.
-If any phase is reordered, the game state becomes inconsistent — modifiers would fire on
-non-existent scores, shops would open at wrong times, and win conditions would be checked
-before damage is applied.
+Game ini adalah permainan kartu bergaya Balatro di mana pemain memainkan kombinasi kartu
+poker selama 3 ronde untuk mencapai target skor.
 
-### 2. What parts are mutable?
+Core loop per ronde:
 
-Everything that changes **what** happens without changing **when** it happens is mutable:
-scoring formulas per hand type, modifier effects, shop item catalog and prices, coin reward
-amounts, target score scaling, and the number of starting hands or discards. All of these
-live inside their respective classes (`ScoringSystem`, `IModifier` subclasses, `ShopSystem`)
-and can be swapped or modified without touching `RunSession`.
+1. Pemain menerima 7 kartu
+2. Pemain memilih kartu untuk dimainkan atau dibuang
+3. Sistem mengevaluasi kombinasi tangan (poker hand)
+4. Base score dihitung berdasarkan jenis tangan
+5. Modifier aktif diterapkan ke skor secara berantai
+6. Skor diakumulasi ke total
+7. Cek kondisi menang/kalah ronde
+8. Pemain mengunjungi toko dan bisa membeli modifier
+9. Ulangi untuk ronde berikutnya dengan target lebih tinggi
 
-### 3. If you wanted to add a new feature, which class would change?
+---
 
-- **New hand type** (e.g., Five of a Kind): add a new `IScoringStrategy` subclass and
-  register it in `ScoringSystem::evaluateHand()`. `RunSession` does not change.
-- **New modifier** (e.g., suit bonus): add a new `IModifier` subclass and expose it in
-  `ModifierFactory`. `RunSession` does not change.
-- **New shop item**: modify `ShopSystem::visitShop()` only.
-- **New coin formula**: modify the reward block inside `startRun()` — the phase position
-  stays the same, only the arithmetic changes.
+## Step 2 — Identifikasi Invariant
 
-### 4. If you changed the loop order, what would break?
+Urutan berikut **tidak boleh berubah**:
 
-- Moving **modifier application before scoring**: modifiers would receive 0 or garbage as
-  input because `evaluateHand()` hasn't run yet.
-- Moving **shop before win-check**: player could buy upgrades even after losing, which makes
-  no gameplay sense.
-- Moving **score accumulation after win-check**: the win condition fires before the last
-  hand's score is counted — the player could win without their final hand being recorded.
-- Moving **fillHand after player selection**: the player selects from an empty or stale hand,
-  breaking input entirely.
+1. Isi kartu (fill hand)
+2. Pemain memilih kartu
+3. Evaluasi tangan → hitung base score
+4. Terapkan modifier ke skor
+5. Akumulasi skor, kurangi slot tangan/discard
+6. Cek kondisi menang/kalah ronde
+7. Fase toko (hanya jika menang)
+8. Lanjut ke ronde berikutnya
 
-Architecture protects the rhythm. The invariant ensures the game always makes sense.
+Jika urutan ini berubah, logika game akan rusak. Contohnya:
+
+1. Jika modifier diterapkan **sebelum** scoring, base score belum ada — modifier menghasilkan nilai salah.
+2. Jika toko dibuka **sebelum** cek menang/kalah, pemain bisa beli modifier meski sudah kalah.
+3. Jika akumulasi skor dilakukan **setelah** cek menang, sistem tidak mendeteksi apakah target tercapai di tangan terakhir.
+4. Jika kartu diisi **setelah** pemain memilih, pemain memilih dari tangan kosong.
+
+**Komponen yang wajib ada:**
+1. `RunSession` — pengontrol loop dan urutan fase
+2. `Card` — unit data kartu
+3. `ScoringSystem` — mengevaluasi tangan dan menghitung base score
+4. `IModifier` — interface untuk semua modifier skor
+5. `ShopSystem` — pembelian modifier antar ronde
+
+---
+
+## Step 3 — Elemen Mutable
+
+Berikut bagian-bagian yang bersifat mutable:
+
+1. **Formula scoring per jenis tangan**
+   Setiap kelas strategi (`PairStrategy`, `StraightStrategy`, dst.) punya formulanya sendiri.
+   Angka-angka ini bisa diubah bebas tanpa memengaruhi urutan fase. Loop tetap memanggil
+   `evaluateHand()` di posisi yang sama.
+
+2. **Perilaku modifier**
+   `FlatBonusModifier` dan `MultiplierModifier` bisa diganti atau ditambah dengan tipe baru
+   (misalnya modifier yang hanya aktif untuk kartu Heart). `RunSession` hanya memanggil
+   `applyModifiers(score)` — **game loop tidak berubah sama sekali** saat modifier baru ditambah.
+
+3. **Isi toko dan harga**
+   `ShopSystem` bisa menawarkan modifier berbeda, mengubah harga, atau menambah item baru.
+   Posisi fase toko dalam loop tidak berubah.
+
+4. **Skala target skor**
+   `targetScore += 400` per ronde adalah angka yang bisa diganti. Kondisi cek menang
+   (`totalScore >= targetScore`) tetap struktural sama.
+
+5. **Formula reward koin**
+   `earnedCoins = 3 + handsRemaining` bisa diubah formulanya. Posisi fase pemberian koin
+   tidak bergerak.
+
+Semua elemen ini bersifat mutable karena mengubah **perilaku numerik atau konten**, bukan **urutan struktural**.
+
+---
+
+## Cara Menambah Modifier Baru (Tanpa Mengubah Game Loop)
+
+Ini adalah bukti bahwa game loop benar-benar terlindungi:
+
+**1. Buat class baru yang implement `IModifier`:**
+```cpp
+// modifiers/SuitBonusModifier.h
+class SuitBonusModifier : public IModifier {
+public:
+    int applyModification(int score) override { return score + 75; }
+    string getName() override { return "Suit Bonus (+75)"; }
+};
+```
+
+**2. Daftarkan di `ModifierFactory`:**
+```cpp
+case 4: return new SuitBonusModifier();
+```
+
+**3. Expose di `ShopSystem`:**
+```cpp
+cout << "3. Suit Bonus (+75 Score) - 5 Coins\n";
+```
+
+**`RunSession` dan game loop (`playHand`) tidak berubah sama sekali.**
+Baris `score = applyModifiers(score)` sudah menangani semua modifier secara otomatis.
+
+---
+
+## Refleksi
+
+### 1. Apa struktur invariant dalam game ini?
+
+Struktur invariant adalah **urutan fase ronde yang dijaga di dalam `RunSession`**:
+
+```
+Isi Kartu → Pilih Kartu → Evaluasi Tangan → Terapkan Modifier →
+Akumulasi Skor → Cek Menang/Kalah → Toko (jika menang) → Lanjut Ronde → Ulangi
+```
+
+Urutan ini tidak boleh berubah. Jika ada fase yang digeser, game state menjadi tidak
+konsisten — modifier diterapkan ke skor yang belum ada, toko dibuka di waktu yang salah,
+atau kondisi menang diperiksa sebelum skor terakhir dihitung.
+
+### 2. Bagian mana yang bersifat mutable?
+
+Semua yang mengubah **apa** yang terjadi tanpa mengubah **kapan** terjadi adalah mutable:
+formula scoring per jenis tangan, efek modifier, katalog dan harga toko, jumlah reward koin,
+skala target skor, dan jumlah tangan atau discard awal. Semua ini hidup di dalam kelas
+masing-masing (`ScoringSystem`, subkelas `IModifier`, `ShopSystem`) dan bisa diganti tanpa
+menyentuh `RunSession`.
+
+### 3. Jika ingin menambah fitur baru, kelas mana yang berubah?
+
+- **Tipe tangan baru** (misal, Five of a Kind): tambah subkelas `IScoringStrategy` baru dan
+  daftarkan di `ScoringSystem::evaluateHand()`. `RunSession` tidak berubah.
+- **Modifier baru** (misal, bonus suit): tambah subkelas `IModifier` baru dan expose melalui
+  `ModifierFactory`. `RunSession` tidak berubah.
+- **Item toko baru**: ubah `ShopSystem::visitShop()` saja.
+- **Formula koin baru**: ubah aritmatika di dalam blok reward di `startRun()` — posisi fase
+  tetap sama.
+
+### 4. Jika urutan loop diubah, apa yang akan rusak?
+
+- Memindahkan **penerapan modifier sebelum scoring**: modifier menerima nilai 0 karena
+  `evaluateHand()` belum dijalankan.
+- Memindahkan **toko sebelum cek menang**: pemain bisa membeli upgrade meski sudah kalah.
+- Memindahkan **akumulasi skor setelah cek menang**: kondisi menang terpicu sebelum skor
+  tangan terakhir dihitung — pemain bisa menang tanpa tangan terakhirnya tercatat.
+- Memindahkan **fillHand setelah pemilihan kartu**: pemain memilih dari tangan kosong atau
+  tangan lama, merusak input sepenuhnya.
+
+**Arsitektur melindungi ritme permainan.**
