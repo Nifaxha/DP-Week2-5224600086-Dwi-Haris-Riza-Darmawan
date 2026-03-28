@@ -4,156 +4,194 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <set>
 #include <algorithm>
-#include "Card.h"
+#include "Reagent.h"
 
 using namespace std;
 
-// Interface NEEDED: 8 concrete hand-evaluation strategies share one contract.
-// ScoringSystem iterates them polymorphically from strongest to weakest.
-// Adding a new hand type = add one new class, nothing else changes.
+// ================================================================
+// IScoringStrategy — Strategy Pattern (Behavioral)
+// ================================================================
+// DIBUTUHKAN: setiap reaksi kimia punya aturan evaluasi berbeda.
+// Strategy memisahkan logika tiap reaksi dari ScoringSystem.
+// Reaksi baru = tambah class baru, ScoringSystem tidak berubah.
+// ================================================================
 class IScoringStrategy {
 public:
     virtual ~IScoringStrategy() = default;
-    virtual int    calculateScore(const vector<Card>& cards) = 0;
-    virtual string getHandName() = 0;
+    virtual int    calculateScore(const vector<Reagent>& reagents) = 0;
+    virtual string getReactionName() = 0;
 };
 
-// ── Concrete strategies ──────────────────────────────────────────
+// ── Helper: hitung jumlah elemen tertentu ───────────────────────
+static int countElement(const vector<Reagent>& r, Element e) {
+    int n = 0;
+    for (const auto& x : r) if (x.element == e) n++;
+    return n;
+}
 
-class StraightFlushStrategy : public IScoringStrategy {
+// ================================================================
+// H2O — 2 Hydrogen + 1 Oxygen
+// ================================================================
+class WaterReactionStrategy : public IScoringStrategy {
 public:
-    int calculateScore(const vector<Card>& cards) override {
-        if (cards.size() < 5) return 0;
-        string firstSuit = cards[0].suit;
-        vector<int> vals;
-        for (const auto& c : cards) {
-            if (c.suit != firstSuit) return 0;
-            vals.push_back(c.value);
+    int calculateScore(const vector<Reagent>& r) override {
+        if (countElement(r, Element::HYDROGEN) >= 2 &&
+            countElement(r, Element::OXYGEN)   >= 1) {
+            int total = 0;
+            for (const auto& x : r) total += x.potency;
+            return total + 80;
         }
-        sort(vals.begin(), vals.end());
-        for (size_t i = 1; i < vals.size(); i++)
-            if (vals[i] != vals[i-1] + 1) return 0;
-        return 800;
-    }
-    string getHandName() override { return "Straight Flush"; }
-};
-
-class FullHouseStrategy : public IScoringStrategy {
-public:
-    int calculateScore(const vector<Card>& cards) override {
-        if (cards.size() != 5) return 0;
-        map<int,int> counts;
-        for (const auto& c : cards) counts[c.value]++;
-        bool has3 = false, has2 = false;
-        for (auto& [v, cnt] : counts) {
-            if (cnt == 3) has3 = true;
-            if (cnt == 2) has2 = true;
-        }
-        return (has3 && has2) ? 400 : 0;
-    }
-    string getHandName() override { return "Full House"; }
-};
-
-class FlushStrategy : public IScoringStrategy {
-public:
-    int calculateScore(const vector<Card>& cards) override {
-        if (cards.size() < 5) return 0;
-        string firstSuit = cards[0].suit;
-        for (const auto& c : cards)
-            if (c.suit != firstSuit) return 0;
-        return 300;
-    }
-    string getHandName() override { return "Flush"; }
-};
-
-class StraightStrategy : public IScoringStrategy {
-public:
-    int calculateScore(const vector<Card>& cards) override {
-        if (cards.size() < 5) return 0;
-        vector<int> vals;
-        for (const auto& c : cards) vals.push_back(c.value);
-        sort(vals.begin(), vals.end());
-        for (size_t i = 1; i < vals.size(); i++)
-            if (vals[i] != vals[i-1] + 1) return 0;
-        return 250;
-    }
-    string getHandName() override { return "Straight"; }
-};
-
-class ThreeOfAKindStrategy : public IScoringStrategy {
-public:
-    int calculateScore(const vector<Card>& cards) override {
-        map<int,int> counts;
-        for (const auto& c : cards) counts[c.value]++;
-        for (auto& [v, cnt] : counts)
-            if (cnt >= 3) return (v * 3) + 150;
         return 0;
     }
-    string getHandName() override { return "Three of a Kind"; }
+    string getReactionName() override { return "H2O (Air)"; }
 };
 
-class TwoPairStrategy : public IScoringStrategy {
+// ================================================================
+// CO2 — 1 Carbon + 2 Oxygen
+// ================================================================
+class CarbonDioxideStrategy : public IScoringStrategy {
 public:
-    int calculateScore(const vector<Card>& cards) override {
-        map<int,int> counts;
-        int pairs = 0, score = 0;
-        for (const auto& c : cards) counts[c.value]++;
-        for (auto& [v, cnt] : counts)
-            if (cnt >= 2) { pairs++; score += v * 2; }
-        return (pairs >= 2) ? score + 100 : 0;
-    }
-    string getHandName() override { return "Two Pair"; }
-};
-
-class PairStrategy : public IScoringStrategy {
-public:
-    int calculateScore(const vector<Card>& cards) override {
-        map<int,int> counts;
-        for (const auto& c : cards) counts[c.value]++;
-        for (auto& [v, cnt] : counts)
-            if (cnt >= 2) return (v * 2) + 50;
+    int calculateScore(const vector<Reagent>& r) override {
+        if (countElement(r, Element::CARBON) >= 1 &&
+            countElement(r, Element::OXYGEN) >= 2) {
+            int total = 0;
+            for (const auto& x : r) total += x.potency;
+            return total + 100;
+        }
         return 0;
     }
-    string getHandName() override { return "Pair"; }
+    string getReactionName() override { return "CO2 (Karbon Dioksida)"; }
 };
 
-class HighCardStrategy : public IScoringStrategy {
+// ================================================================
+// NH3 — 1 Nitrogen + 3 Hydrogen
+// ================================================================
+class AmmoniaStrategy : public IScoringStrategy {
 public:
-    int calculateScore(const vector<Card>& cards) override {
+    int calculateScore(const vector<Reagent>& r) override {
+        if (countElement(r, Element::NITROGEN) >= 1 &&
+            countElement(r, Element::HYDROGEN) >= 3) {
+            int total = 0;
+            for (const auto& x : r) total += x.potency;
+            return total + 140;
+        }
+        return 0;
+    }
+    string getReactionName() override { return "NH3 (Amonia)"; }
+};
+
+// ================================================================
+// Fe2O3 — 2 Iron + 3 Oxygen (Karat besi)
+// ================================================================
+class IronOxideStrategy : public IScoringStrategy {
+public:
+    int calculateScore(const vector<Reagent>& r) override {
+        if (countElement(r, Element::IRON)   >= 2 &&
+            countElement(r, Element::OXYGEN) >= 3) {
+            int total = 0;
+            for (const auto& x : r) total += x.potency;
+            return total + 200;
+        }
+        return 0;
+    }
+    string getReactionName() override { return "Fe2O3 (Besi Oksida)"; }
+};
+
+// ================================================================
+// NaCl — 1 Sodium + 1 Sulfur (garam sederhana, analog)
+// ================================================================
+class SaltReactionStrategy : public IScoringStrategy {
+public:
+    int calculateScore(const vector<Reagent>& r) override {
+        if (countElement(r, Element::SODIUM)  >= 1 &&
+            countElement(r, Element::SULFUR)  >= 1) {
+            int total = 0;
+            for (const auto& x : r) total += x.potency;
+            return total + 60;
+        }
+        return 0;
+    }
+    string getReactionName() override { return "Na2S (Natrium Sulfida)"; }
+};
+
+// ================================================================
+// CaO — 1 Calcium + 1 Oxygen (Kapur bakar)
+// ================================================================
+class LimeStrategy : public IScoringStrategy {
+public:
+    int calculateScore(const vector<Reagent>& r) override {
+        if (countElement(r, Element::CALCIUM) >= 1 &&
+            countElement(r, Element::OXYGEN)  >= 1) {
+            int total = 0;
+            for (const auto& x : r) total += x.potency;
+            return total + 50;
+        }
+        return 0;
+    }
+    string getReactionName() override { return "CaO (Kapur Bakar)"; }
+};
+
+// ================================================================
+// Full Spectrum — semua 5+ elemen berbeda (reaksi langka)
+// ================================================================
+class FullSpectrumStrategy : public IScoringStrategy {
+public:
+    int calculateScore(const vector<Reagent>& r) override {
+        set<Element> uniqueElems;
         int total = 0;
-        for (const auto& c : cards) total += c.value;
+        for (const auto& x : r) {
+            uniqueElems.insert(x.element);
+            total += x.potency;
+        }
+        if ((int)uniqueElems.size() >= 5) return total * 4 + 300;
+        return 0;
+    }
+    string getReactionName() override { return "Full Spectrum (Reaksi Langka!)"; }
+};
+
+// ================================================================
+// BasicMix — fallback jika tidak ada reaksi yang cocok
+// ================================================================
+class BasicMixStrategy : public IScoringStrategy {
+public:
+    int calculateScore(const vector<Reagent>& r) override {
+        int total = 0;
+        for (const auto& x : r) total += x.potency;
         return total + 10;
     }
-    string getHandName() override { return "High Card"; }
+    string getReactionName() override { return "Basic Mix (Campuran Biasa)"; }
 };
 
-// ── ScoringSystem — concrete class, NO interface needed ──────────
-// Only one scoring system exists; RunSession never swaps it polymorphically.
+// ================================================================
+// ScoringSystem — concrete class (tidak butuh interface)
+// ================================================================
 class ScoringSystem {
 public:
-    int evaluateHand(const vector<Card>& cards, string& outHandName) {
+    int evaluateReaction(const vector<Reagent>& reagents, string& outReactionName) {
+        // Coba dari reaksi terkuat ke terlemah
         vector<IScoringStrategy*> strategies = {
-            new StraightFlushStrategy(),
-            new FullHouseStrategy(),
-            new FlushStrategy(),
-            new StraightStrategy(),
-            new ThreeOfAKindStrategy(),
-            new TwoPairStrategy(),
-            new PairStrategy(),
-            new HighCardStrategy()
+            new FullSpectrumStrategy(),
+            new IronOxideStrategy(),
+            new AmmoniaStrategy(),
+            new CarbonDioxideStrategy(),
+            new WaterReactionStrategy(),
+            new SaltReactionStrategy(),
+            new LimeStrategy(),
+            new BasicMixStrategy()
         };
 
         int finalScore = 0;
-        for (auto strat : strategies) {
-            int s = strat->calculateScore(cards);
-            if (s > 0) {
-                outHandName = strat->getHandName();
-                finalScore = s;
+        for (auto s : strategies) {
+            int score = s->calculateScore(reagents);
+            if (score > 0) {
+                outReactionName = s->getReactionName();
+                finalScore      = score;
                 break;
             }
         }
-        for (auto strat : strategies) delete strat;
+        for (auto s : strategies) delete s;
         return finalScore;
     }
 };

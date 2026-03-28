@@ -3,15 +3,24 @@
 
 #include "modifiers/IModifier.h"
 
+// ================================================================
+// ModifierFactory — Factory Pattern (Creational)
+// ================================================================
+// Memusatkan pembuatan semua katalis di satu tempat.
+// ShopSystem tidak perlu tahu nama kelas konkret katalis.
+// Modifier baru ditambah: hanya file ini yang berubah.
+// ================================================================
 class ModifierFactory {
 public:
-    // Factory Method untuk membuat modifier secara dinamis
-    static IModifier* createModifier(int type) {
+    static IModifier* createModifier(int type, int elementCount = 0) {
         switch (type) {
-            case 1: return new FlatBonusModifier(30);  // Tipe 1: +30 Skor
-            case 2: return new MultiplierModifier(2);  // Tipe 2: Skor x2
-            case 3: return new FlatBonusModifier(50);  // Tipe 3: +50 Skor
-            default: return new FlatBonusModifier(10);
+            case 1: return new PotencyBooster(25);
+            case 2: return new PotencyBooster(50);
+            case 3: return new ReactionAmplifier(2);
+            case 4: return new ReactionAmplifier(3);
+            case 5: return new ExothermicSurge();
+            case 6: return new ElementBonusCatalyst(20, elementCount);
+            default: return new PotencyBooster(10);
         }
     }
 };
